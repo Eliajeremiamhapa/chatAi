@@ -13,27 +13,33 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 /**
- * FIX 1: Use Back4app's dynamic port. 
- * The platform injects a port number into process.env.PORT.
+ * FIX 1: Port Configuration
+ * Back4app uses the PORT environment variable to route traffic.
  */
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serves static files if you decide to add a web interface later
 app.use(express.static(path.join(__dirname, "public")));
 
 /**
- * FIX 2: Correct SDK Initialization.
- * Ensure you have run: npm install @google/generative-ai
+ * FIX 2: AI SDK Initialization
+ * Make sure GOOGLE_API_KEY is set in your Back4app Dashboard.
  */
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-// Root Health Check (Required for Back4app to show "Healthy")
+// Health Check - Essential for Back4app deployment success
 app.get("/", (req, res) => {
-  res.status(200).send("Chatbot Server Online");
+  res.status(200).json({ 
+    status: "online", 
+    message: "EliaGPT API is active",
+    endpoint: "/ask" 
+  });
 });
 
-// Chatbot Route
+// Main API Route for Android & Web
 app.post("/ask", async (req, res) => {
   try {
     const { question } = req.body;
@@ -42,24 +48,36 @@ app.post("/ask", async (req, res) => {
       return res.status(400).json({ error: "Please enter a message." });
     }
 
-    // Use a stable model version
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    /**
+     * Using Gemini 2.0 Flash (Latest Stable for 2026)
+     * This model is faster and smarter than 1.5.
+     */
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const result = await model.generateContent(question);
     const response = await result.response;
     const answer = response.text();
 
-    res.json({ answer });
+    // Standard JSON response for easy parsing in Android (Retrofit/GSON)
+    res.json({ 
+      success: true,
+      answer: answer 
+    });
+
   } catch (error) {
-    console.error("Deployment Error:", error);
-    res.status(500).json({ error: "AI request failed.", message: error.message });
+    console.error("AI Generation Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: "AI request failed.", 
+      message: error.message 
+    });
   }
 });
 
 /**
- * FIX 3: Bind to 0.0.0.0
- * This allows the container to accept external traffic.
+ * FIX 3: Host Binding
+ * Binding to "0.0.0.0" is mandatory for Docker/Container environments.
  */
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`🚀 EliaGPT API running on port ${PORT}`);
 });
